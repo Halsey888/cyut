@@ -1,11 +1,52 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, Alert, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Image, Modal } from 'react-native';
+import { Animated, StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, Alert, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Image, Modal } from 'react-native';
 import { Audio } from 'expo-av';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker } from 'react-native-maps';
-import ImageViewer from 'react-native-image-zoom-viewer'; //新增外部套件npm install react-native-image-zoom-viewer
+import { GestureHandlerRootView, PinchGestureHandler, State } from 'react-native-gesture-handler';
 
 const API_URL = 'https://nonviscidly-perkiest-danyel.ngrok-free.dev/ask_guide';
+
+const ZoomableImage = ({ source }) => {
+  const baseScale = useRef(new Animated.Value(1)).current;   // 累計基礎倍率
+  const pinchScale = useRef(new Animated.Value(1)).current;  // 手勢即時倍率
+  const lastScale = useRef(1);                               // 輔助記錄數值
+
+  const onPinchEvent = Animated.event(
+    [{ nativeEvent: { scale: pinchScale } }],
+    { useNativeDriver: true }
+  );
+
+  const onPinchStateChange = (event) => {
+    if (event.nativeEvent.oldState === State.ACTIVE) {
+      const newCumulativeScale = lastScale.current * event.nativeEvent.scale;
+      lastScale.current = newCumulativeScale;
+      baseScale.setValue(newCumulativeScale);
+      pinchScale.setValue(1);
+    }
+  };
+
+  const finalScale = Animated.multiply(baseScale, pinchScale);
+
+  return (
+    <PinchGestureHandler
+      onGestureEvent={onPinchEvent}
+      onHandlerStateChange={onPinchStateChange}
+    >
+      <Animated.View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Animated.Image
+          source={source}
+          style={{
+            width: '100%',
+            height: '100%',
+            transform: [{ scale: finalScale }],
+          }}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </PinchGestureHandler>
+  );
+};
 
 export default function App() {
   const [inputText, setInputText] = useState(''); // 輸入框狀態
@@ -167,112 +208,105 @@ export default function App() {
   );
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : "height"} 
-          style={{ flex: 1 }}
-        >
-        <View style={styles.header}>
-          <Text style={styles.title}>朝陽 AI 導覽員</Text>
-          <Picker selectedValue={langCode} style={styles.picker} onValueChange={(val) => setLangCode(val)}>
-            <Picker.Item label="繁體中文" value="zh-TW" />
-            <Picker.Item label="English" value="en-US" />
-            <Picker.Item label="日本語" value="ja-JP" />
-          </Picker>
-        </View>
-
-        <FlatList
-          data={messages}
-          keyExtractor={item => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.chatArea}
-        />
-
-        {/* 地圖區塊 - 僅在 showMap 為 true 時顯示 */}
-        {showMap && (
-          <View style={styles.mapContainer}>
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={{
-                latitude: 24.0689,
-                longitude: 120.7145,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-            >
-              {targetMarker && <Marker coordinate={targetMarker} title="目標位置" />}
-            </MapView>
-            
-            {/* 隱藏地圖按鈕 */}
-            <TouchableOpacity 
-              style={styles.hideMapBtn} 
-              onPress={() => setShowMap(false)}
-            >
-              <Text style={styles.hideMapBtnText}>隱藏地圖 ✕</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* 底部輸入區：整合語音與文字 */}
-          <View style={styles.footer}>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="輸入問題..."
-                value={inputText}
-                onChangeText={setInputText}
-                multiline={false}
-              />
-              
-              {inputText.length > 0 ? (
-                <TouchableOpacity style={styles.sendBtn} onPress={sendTextMessage}>
-                  <Text style={styles.sendBtnText}>發送</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity 
-                  style={[styles.miniRecordBtn, recording ? styles.recording : null]} 
-                  onLongPress={startRecording}
-                  onPressOut={stopAndSend}
-                >
-                  <Text style={styles.miniBtnText}>{recording ? '...' : '🎤'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {isProcessing && <ActivityIndicator size="small" color="#007bff" style={{marginTop: 10}} />}
-          </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-
-       {/* 圖片放大 Modal */}
-      <Modal
-        animationType="fade"
-        transparent={false}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          {/* 自訂關閉按鈕（疊在最上層） */}
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setModalVisible(false)}
+    <GestureHandlerRootView style={styles.container}>
+      <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"} 
+            style={{ flex: 1 }}
           >
-            <Text style={styles.closeButtonText}>✕ 關閉</Text>
-          </TouchableOpacity>
+          <View style={styles.header}>
+            <Text style={styles.title}>朝陽 AI 導覽員</Text>
+            <Picker selectedValue={langCode} style={styles.picker} onValueChange={(val) => setLangCode(val)}>
+              <Picker.Item label="繁體中文" value="zh-TW" />
+              <Picker.Item label="English" value="en-US" />
+              <Picker.Item label="日本語" value="ja-JP" />
+            </Picker>
+          </View>
 
-          {selectedImageUri && (
-            <ImageViewer
-              imageUrls={[{ url: selectedImageUri }]}
-              enableSwipeDown={false}      // 防止下滑關閉
-              renderIndicator={() => null}  // 隱藏底部圓點指示器
-              onClick={() => setModalVisible(false)} // 點擊圖片本身也可關閉
-              backgroundColor="black"
-            />
+          <FlatList
+            data={messages}
+            keyExtractor={item => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.chatArea}
+          />
+
+          {/* 地圖區塊 - 僅在 showMap 為 true 時顯示 */}
+          {showMap && (
+            <View style={styles.mapContainer}>
+              <MapView
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={{
+                  latitude: 24.0689,
+                  longitude: 120.7145,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+              >
+                {targetMarker && <Marker coordinate={targetMarker} title="目標位置" />}
+              </MapView>
+              
+              {/* 隱藏地圖按鈕 */}
+              <TouchableOpacity 
+                style={styles.hideMapBtn} 
+                onPress={() => setShowMap(false)}
+              >
+                <Text style={styles.hideMapBtnText}>隱藏地圖 ✕</Text>
+              </TouchableOpacity>
+            </View>
           )}
-        </View>
-      </Modal>
-    </View>
+
+          {/* 底部輸入區：整合語音與文字 */}
+            <View style={styles.footer}>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="輸入問題..."
+                  value={inputText}
+                  onChangeText={setInputText}
+                  multiline={false}
+                />
+                
+                {inputText.length > 0 ? (
+                  <TouchableOpacity style={styles.sendBtn} onPress={sendTextMessage}>
+                    <Text style={styles.sendBtnText}>發送</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity 
+                    style={[styles.miniRecordBtn, recording ? styles.recording : null]} 
+                    onLongPress={startRecording}
+                    onPressOut={stopAndSend}
+                  >
+                    <Text style={styles.miniBtnText}>{recording ? '...' : '🎤'}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {isProcessing && <ActivityIndicator size="small" color="#007bff" style={{marginTop: 10}} />}
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+
+        {/* 圖片放大 Modal */}
+        <Modal
+          animationType="fade"
+          transparent={false}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <GestureHandlerRootView style={styles.modalContainer}>
+              {/* 關閉按鈕保持原樣 */}
+              <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
+                <Text style={styles.closeButtonText}>✕ 關閉</Text>
+              </TouchableOpacity>
+
+              {selectedImageUri && (
+                <ZoomableImage source={{ uri: selectedImageUri }} />
+              )}
+          </GestureHandlerRootView>
+        </Modal>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -351,16 +385,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 10,
   },
-  recording: { backgroundColor: '#ff4444' },
   miniBtnText: { color: '#fff', fontSize: 18 },
-  footer: { padding: 15, backgroundColor: '#f9f9f9' },
 
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   closeButton: {
       position: 'absolute',
       top: 50,
@@ -379,21 +405,21 @@ const styles = StyleSheet.create({
 
   modalContainer: {
     flex: 1,
-    backgroundColor: '#000', // 背景黑
+    backgroundColor: '#000',
   },
   closeButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+      position: 'absolute',
+      top: 50,
+      right: 20,
+      zIndex: 10,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 20,
   },
   closeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: 'bold',
   },
 });
