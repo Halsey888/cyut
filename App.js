@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, 
 import { Audio } from 'expo-av';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker } from 'react-native-maps';
+import ImageViewer from 'react-native-image-zoom-viewer'; //新增外部套件npm install react-native-image-zoom-viewer
 
 const API_URL = 'https://nonviscidly-perkiest-danyel.ngrok-free.dev/ask_guide';
 
@@ -251,18 +252,25 @@ export default function App() {
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
+        <View style={styles.modalContainer}>
+          {/* 自訂關閉按鈕（疊在最上層） */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setModalVisible(false)}
+          >
             <Text style={styles.closeButtonText}>✕ 關閉</Text>
           </TouchableOpacity>
+
           {selectedImageUri && (
-            <Image
-              source={{ uri: selectedImageUri }}
-              style={styles.fullImage}
-              resizeMode="contain"
+            <ImageViewer
+              imageUrls={[{ url: selectedImageUri }]}
+              enableSwipeDown={false}      // 防止下滑關閉
+              renderIndicator={() => null}  // 隱藏底部圓點指示器
+              onClick={() => setModalVisible(false)} // 點擊圖片本身也可關閉
+              backgroundColor="black"
             />
           )}
-        </SafeAreaView>
+        </View>
       </Modal>
     </View>
   );
@@ -368,8 +376,24 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontWeight: 'bold',
   },
-  fullImage: {
-      width: '100%',
-      height: '100%',
+
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#000', // 背景黑
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
