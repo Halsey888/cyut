@@ -1,50 +1,63 @@
 import React, { useState, useRef } from 'react';
-import { Animated, StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, Alert, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Image, Modal } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, FlatList, ActivityIndicator, Alert, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Image, Modal } from 'react-native';
 import { Audio } from 'expo-av';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker } from 'react-native-maps';
-import { GestureHandlerRootView, PinchGestureHandler, State } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 const API_URL = 'https://nonviscidly-perkiest-danyel.ngrok-free.dev/ask_guide';
 
 const ZoomableImage = ({ source }) => {
-  const baseScale = useRef(new Animated.Value(1)).current;   // 累計基礎倍率
-  const pinchScale = useRef(new Animated.Value(1)).current;  // 手勢即時倍率
-  const lastScale = useRef(1);                               // 輔助記錄數值
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
 
-  const onPinchEvent = Animated.event(
-    [{ nativeEvent: { scale: pinchScale } }],
-    { useNativeDriver: true }
-  );
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
 
-  const onPinchStateChange = (event) => {
-    if (event.nativeEvent.oldState === State.ACTIVE) {
-      const newCumulativeScale = lastScale.current * event.nativeEvent.scale;
-      lastScale.current = newCumulativeScale;
-      baseScale.setValue(newCumulativeScale);
-      pinchScale.setValue(1);
-    }
-  };
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+    });
 
-  const finalScale = Animated.multiply(baseScale, pinchScale);
+  const panGesture = Gesture.Pan()
+    .minPointers(1)
+    .maxPointers(1)
+    .onUpdate((e) => {
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const composedGesture = Gesture.Simultaneous(panGesture, pinchGesture);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   return (
-    <PinchGestureHandler
-      onGestureEvent={onPinchEvent}
-      onHandlerStateChange={onPinchStateChange}
-    >
-      <Animated.View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Animated.Image
           source={source}
-          style={{
-            width: '100%',
-            height: '100%',
-            transform: [{ scale: finalScale }],
-          }}
+          style={[{ width: '100%', height: '100%' }, animatedStyle]}
           resizeMode="contain"
         />
       </Animated.View>
-    </PinchGestureHandler>
+    </GestureDetector>
   );
 };
 
